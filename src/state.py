@@ -23,6 +23,7 @@ class LeadData(BaseModel):
     email: str = Field(..., description="The email address of the lead")
     phone: str = Field(..., description="The phone number of the lead")
     profile: str = Field(..., description="The lead profile summary from LinkedIn data")
+    company_name: str = Field(default="", description="The company name extracted from CRM")
 
 class CompanyData(BaseModel):
     name: str = ""

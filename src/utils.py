@@ -77,10 +77,12 @@ def get_llm_by_provider(llm_provider, model):
 def invoke_llm(
     system_prompt,
     user_message,
-    model="gemini-1.5-flash",  # Specify the model name according to the provider
+    model="gemini-3.1-pro-preview",  # Specify the model name according to the provider
     llm_provider="google",  # By default use Google as provider
     response_format=None
 ):
+    system_prompt += "\n\n# CRITICAL INSTRUCTION\nYou MUST translate and write the ENTIRE output (including all headings, bullet points, and paragraphs) in Traditional Chinese (繁體中文 zh-TW). Do not output English unless it is a proper noun."
+    
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_message),

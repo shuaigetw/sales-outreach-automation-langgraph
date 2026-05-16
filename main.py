@@ -2,23 +2,24 @@ import os
 from dotenv import load_dotenv
 from src.graph import OutReachAutomation
 from src.state import *
-from src.tools.leads_loader.airtable import AirtableLeadLoader
-from src.tools.leads_loader.google_sheets import GoogleSheetLeadLoader
+from src.tools.leads_loader.zoho_crm import ZohoLeadLoader
 
 # Load environment variables from a .env file
 load_dotenv()
 
 if __name__ == "__main__":
-    # Use Airtable for accessing your leads list
-    lead_loader = AirtableLeadLoader(
-        access_token=os.getenv("AIRTABLE_ACCESS_TOKEN"),
-        base_id=os.getenv("AIRTABLE_BASE_ID"),
-        table_name=os.getenv("AIRTABLE_TABLE_NAME"),
+    # Use Zoho CRM for accessing your leads list
+    lead_loader = ZohoLeadLoader(
+        access_token=os.getenv("ZOHO_ACCESS_TOKEN"),
+        api_domain=os.getenv("ZOHO_API_DOMAIN")
     )
     
-    # Use Sheet for accessing your leads list
-    # lead_loader = GoogleSheetLeadLoader(
-    #     spreadsheet_id=os.getenv("SHEET_ID"),
+    # Use Airtable for accessing your leads list
+    # from src.tools.leads_loader.airtable import AirtableLeadLoader
+    # lead_loader = AirtableLeadLoader(
+    #     access_token=os.getenv("AIRTABLE_ACCESS_TOKEN"),
+    #     base_id=os.getenv("AIRTABLE_BASE_ID"),
+    #     table_name=os.getenv("AIRTABLE_TABLE_NAME"),
     # )
     
     # Instantiate the OutReachAutomation class

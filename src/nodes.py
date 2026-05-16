@@ -1,8 +1,8 @@
 from colorama import Fore, Style
 from .tools.base.markdown_scraper_tool import scrape_website_to_markdown
 from .tools.base.search_tools import get_recent_news
-from .tools.base.gmail_tools import GmailTools
-from .tools.google_docs_tools import GoogleDocsManager
+# from .tools.base.gmail_tools import GmailTools
+# from .tools.google_docs_tools import GoogleDocsManager
 from .tools.lead_research import research_lead_on_linkedin
 from .tools.company_research import research_lead_company, generate_company_profile
 from .tools.youtube_tools import get_youtube_stats
@@ -22,7 +22,7 @@ SAVE_TO_GOOGLE_DOCS = False
 class OutReachAutomationNodes:
     def __init__(self, loader):
         self.lead_loader = loader
-        self.docs_manager = GoogleDocsManager()
+        self.docs_manager = None # GoogleDocsManager() disabled
         self.drive_folder_name = ""
 
     def get_new_leads(self, state: GraphInputState):
@@ -34,12 +34,13 @@ class OutReachAutomationNodes:
         # Structure the leads
         leads = [
             LeadData(
-                id=lead["id"],
-                name=f'{lead.get("First Name", "")} {lead.get("Last Name", "")}',
-                email=lead.get("Email", ""),
-                phone=lead.get("Phone", ""),
-                address=lead.get("Address", ""),
-                profile="" # will be constructed
+                id=lead.get("id") or "",
+                name=f'{lead.get("First_Name") or ""} {lead.get("Last_Name") or ""}'.strip(),
+                email=lead.get("Email") or "",
+                phone=lead.get("Phone") or "",
+                address=lead.get("Mailing_Street") or "",
+                profile="", # will be constructed
+                company_name=lead.get("Company") or ""
             )
             for lead in raw_leads
         ]
@@ -79,8 +80,12 @@ class OutReachAutomationNodes:
             company_name, 
             company_website,
             company_linkedin_url
-        ) = research_lead_on_linkedin(lead_data.name, lead_data.email)
+        ) = research_lead_on_linkedin(lead_data.name, lead_data.email, lead_data.company_name)
         lead_data.profile = lead_profile
+
+        # Fallback to CRM company name if LinkedIn scraping failed to find one
+        if not company_name:
+            company_name = lead_data.company_name
 
         # Research company on linkedin
         company_profile = research_lead_company(company_linkedin_url)
@@ -111,7 +116,7 @@ class OutReachAutomationNodes:
             website_info = invoke_llm(
                 system_prompt=WEBSITE_ANALYSIS_PROMPT.format(main_url=company_website), 
                 user_message=content,
-                model="gemini-1.5-flash",
+                model="gemini-3.1-pro-preview",
                 response_format=WebsiteData
             )
 
@@ -138,7 +143,7 @@ class OutReachAutomationNodes:
         general_lead_search_report = invoke_llm(
             system_prompt=LEAD_SEARCH_REPORT_PROMPT, 
             user_message=inputs,
-            model="gemini-1.5-flash"
+            model="gemini-3.1-pro-preview"
         )
         
         lead_search_report = Report(
@@ -169,14 +174,16 @@ class OutReachAutomationNodes:
             blog_analysis_report = invoke_llm(
                 system_prompt=prompt, 
                 user_message=blog_content,
-                model="gemini-1.5-flash"
+                model="gemini-3.1-pro-preview"
             )
             blog_analysis_report = Report(
                 title="Blog Analysis Report",
                 content=blog_analysis_report,
                 is_markdown=True
             )
-        return {"reports": [blog_analysis_report]}
+            return {"reports": [blog_analysis_report]}
+            
+        return {"reports": []}
     
     def analyze_social_media_content(self, state: GraphState):
         print(Fore.YELLOW + "----- Analyzing company social media accounts -----\n" + Style.RESET_ALL)
@@ -189,6 +196,8 @@ class OutReachAutomationNodes:
         twitter_url = company_data.social_media_links.twitter
         youtube_url = company_data.social_media_links.youtube
         
+        youtube_analysis_report = None
+        
         # Check If company has Youtube channel
         if youtube_url:
             youtube_data = get_youtube_stats(youtube_url)
@@ -196,7 +205,7 @@ class OutReachAutomationNodes:
             youtube_insight = invoke_llm(
                 system_prompt=prompt, 
                 user_message=youtube_data,
-                model="gemini-1.5-flash"
+                model="gemini-3.1-pro-preview"
             )
             youtube_analysis_report = Report(
                 title="Youtube Analysis Report",
@@ -214,9 +223,11 @@ class OutReachAutomationNodes:
             # TODO Add Twitter analysis part
             pass
         
+        reports_to_return = [youtube_analysis_report] if youtube_analysis_report else []
+        
         return {
             "company_data": company_data,
-            "reports": [youtube_analysis_report]
+            "reports": reports_to_return
         }
     
     def analyze_recent_news(self, state: GraphState):
@@ -239,7 +250,7 @@ class OutReachAutomationNodes:
         news_insight = invoke_llm(
             system_prompt=news_analysis_prompt, 
             user_message=recent_news,
-            model="gemini-1.5-flash"
+            model="gemini-3.1-pro-preview"
         )
         
         news_analysis_report = Report(
@@ -289,7 +300,7 @@ class OutReachAutomationNodes:
         digital_presence_report = invoke_llm(
             system_prompt=prompt, 
             user_message=inputs,
-            model="gemini-1.5-flash"
+            model="gemini-3.1-pro-preview"
         ) 
         
         digital_presence_report = Report(
@@ -325,7 +336,7 @@ class OutReachAutomationNodes:
         full_report = invoke_llm(
             system_prompt=prompt, 
             user_message=inputs,
-            model="gemini-1.5-flash"
+            model="gemini-3.1-pro-preview"
         )
         
         global_research_report = Report(
@@ -353,7 +364,7 @@ class OutReachAutomationNodes:
         lead_score = invoke_llm(
             system_prompt=SCORE_LEAD_PROMPT,
             user_message=global_research_report,
-            model="gemini-1.5-pro"
+            model="gemini-3.1-pro-preview"
         )
         return {"lead_score": lead_score.strip()}
 
@@ -378,7 +389,14 @@ class OutReachAutomationNodes:
         """
         # Checking if the lead score is 7 or higher
         print(f"Score: {state['lead_score']}")
-        is_qualified = float(state["lead_score"]) >= 7
+        
+        # Clean score string to handle cases like '1/10' or '7.5/10'
+        score_str = state["lead_score"].split("/")[0].strip()
+        try:
+            is_qualified = float(score_str) >= 7
+        except ValueError:
+            is_qualified = False
+            
         if is_qualified:
             print(Fore.GREEN + "Lead is qualified\n" + Style.RESET_ALL)
             return "qualified"
@@ -418,7 +436,7 @@ class OutReachAutomationNodes:
         custom_outreach_report = invoke_llm(
             system_prompt=GENERATE_OUTREACH_REPORT_PROMPT,
             user_message=inputs,
-            model="gemini-1.5-pro"
+            model="gemini-3.1-pro-preview"
         )
         
         # TODO Find better way to include correct links into the final report
@@ -438,22 +456,22 @@ class OutReachAutomationNodes:
         revised_outreach_report = invoke_llm(
             system_prompt=PROOF_READER_PROMPT,
             user_message=inputs,
-            model="gemini-1.5-flash"
+            model="gemini-3.1-pro-preview"
         )
         
         # Store report into google docs and get shareable link
-        new_doc = self.docs_manager.add_document(
-            content=revised_outreach_report,
-            doc_title="Outreach Report",
-            folder_name=self.drive_folder_name,
-            make_shareable=True,
-            folder_shareable=True, # Set to false if only personal or true if with a team
-            markdown=True
-        )  
+        # new_doc = self.docs_manager.add_document(
+        #     content=revised_outreach_report,
+        #     doc_title="Outreach Report",
+        #     folder_name=self.drive_folder_name,
+        #     make_shareable=True,
+        #     folder_shareable=True, # Set to false if only personal or true if with a team
+        #     markdown=True
+        # )  
         
         return {
-            "custom_outreach_report_link": new_doc["shareable_url"],
-            "reports_folder_link": new_doc["folder_url"]
+            "custom_outreach_report_link": "local_report",
+            "reports_folder_link": "local_folder"
         }
 
     def generate_personalized_email(self, state: GraphState):
@@ -481,7 +499,7 @@ class OutReachAutomationNodes:
         output = invoke_llm(
             system_prompt=PERSONALIZE_EMAIL_PROMPT,
             user_message=lead_data,
-            model="gemini-1.5-flash",
+            model="gemini-3.1-pro-preview",
             response_format=EmailResponse
         )
         
@@ -493,20 +511,21 @@ class OutReachAutomationNodes:
         email = state["current_lead"].email
         
         # Create draft email
-        gmail = GmailTools()
-        gmail.create_draft_email(
-            recipient=email,
-            subject=subject,
-            email_content=personalized_email
-        )
+        # gmail = GmailTools()
+        # gmail.create_draft_email(
+        #     recipient=email,
+        #     subject=subject,
+        #     email_content=personalized_email
+        # )
         
         # Send email directly
         if SEND_EMAIL_DIRECTLY:
-            gmail.send_email(
-                recipient=email,
-                subject=subject,
-                email_content=personalized_email
-            )
+            # gmail.send_email(
+            #     recipient=email,
+            #     subject=subject,
+            #     email_content=personalized_email
+            # )
+            pass
         
         # Save email with reports for reference
         personalized_email_doc = Report(
@@ -527,7 +546,7 @@ class OutReachAutomationNodes:
         spin_questions = invoke_llm(
             system_prompt=GENERATE_SPIN_QUESTIONS_PROMPT,
             user_message=global_research_report,
-            model="gemini-1.5-flash"
+            model="gemini-3.1-pro-preview"
         )
         
         inputs = f"""
@@ -544,7 +563,7 @@ class OutReachAutomationNodes:
         interview_script = invoke_llm(
             system_prompt=WRITE_INTERVIEW_SCRIPT_PROMPT,
             user_message=inputs,
-            model="gemini-1.5-flash"
+            model="gemini-3.1-pro-preview"
         )
         
         interview_script_doc = Report(
@@ -586,12 +605,38 @@ class OutReachAutomationNodes:
         # save new record data, ensure correct fields are used
         new_data = {
             "Status": "ATTEMPTED_TO_CONTACT", # Set lead to attempted contact
-            "Score": state["lead_score"], 
-            "Analysis Reports": state["reports_folder_link"],
-            "Outreach Report": state["custom_outreach_report_link"],
+            "Score": state.get("lead_score", ""), 
+            "Analysis Reports": state.get("reports_folder_link", ""),
+            "Outreach Report": state.get("custom_outreach_report_link", ""),
             "Last Contacted": get_current_date()
         }
-        self.lead_loader.update_record(state["current_lead"].id, new_data)
+        # 依照使用者需求，暫時關閉直接寫回 Zoho CRM，先讓使用者檢閱 CSV 與報告
+        # self.lead_loader.update_record(state["current_lead"].id, new_data)
+        
+        # 同步匯出至 CSV 檔案供 Excel 開啟
+        import csv
+        import os
+        csv_path = os.path.join("reports", "leads_summary.csv")
+        try:
+            file_exists = os.path.isfile(csv_path)
+            with open(csv_path, mode="a", newline="", encoding="utf-8-sig") as csv_file:
+                fieldnames = ["Name", "Email", "Phone", "Company", "Score", "Status"]
+                writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+                
+                if not file_exists:
+                    writer.writeheader()
+                    
+                writer.writerow({
+                    "Name": state["current_lead"].name,
+                    "Email": state["current_lead"].email,
+                    "Phone": state["current_lead"].phone,
+                    "Company": state["company_data"].name if state.get("company_data") else "",
+                    "Score": state.get("lead_score", ""),
+                    "Status": "ATTEMPTED_TO_CONTACT"
+                })
+        except PermissionError:
+            print(Fore.RED + f"\n[警告] 無法寫入 {csv_path}。請確認您是否正在 Excel 中開啟此檔案？" + Style.RESET_ALL)
+            print(Fore.RED + "本次客戶紀錄未寫入 CSV，但報告已正常產出。\n" + Style.RESET_ALL)
         
         # reset reports list
         state["reports"] = []

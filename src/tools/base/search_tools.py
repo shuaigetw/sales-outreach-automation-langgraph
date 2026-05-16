@@ -51,6 +51,8 @@ def get_recent_news(company: str) -> str:
             
             news_string += f"Title: {title}\nSnippet: {snippet}\nDate: {date}\nURL: {link}\n\n"
         
+        if not news_string:
+            return "No recent news found for this company."
         return news_string
     else:
         return f"Error fetching news: {response.status_code}"

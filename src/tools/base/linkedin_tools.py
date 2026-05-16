@@ -29,7 +29,7 @@ def extract_linkedin_url(search_results):
     result = invoke_llm(
         system_prompt=EXTRACT_LINKEDIN_URL_PROMPT, 
         user_message=str(search_results),
-        model="gemini-1.5-flash"
+        model="gemini-3.1-pro-preview"
     )
     return result
     

@@ -32,27 +32,32 @@ def extract_company_name(email):
     except IndexError:
         return "Company not found"
 
-def research_lead_on_linkedin(lead_name, lead_email):
+def research_lead_on_linkedin(lead_name, lead_email, crm_company_name=""):
     """
     Searches for the lead's LinkedIn profile based on the lead name and company name.
     
     @param lead_name: The name of the lead to search for.
+    @param lead_email: The email of the lead.
+    @param crm_company_name: The company name from CRM (optional).
     @return: A dictionary containing the lead profile data or an error message if not found.
     """
-    # extract company name from pro email
-    company_name = extract_company_name(lead_email)
+    # use CRM company name if available, else extract from pro email
+    if crm_company_name:
+        company_name = crm_company_name
+    else:
+        company_name = extract_company_name(lead_email)
         
     # Find lead LinkedIn URL by searching on Google 'LinkedIn {{lead name}} {{company name}}'
     query = f"LinkedIn {lead_name} {company_name}"
     search_results = google_search(query)
     lead_linkedin_url = extract_linkedin_url(search_results)
     if not lead_linkedin_url:
-        return "Lead LinkedIn URL not found."
+        return ("Lead LinkedIn URL not found.", "", "", "")
 
     # Scrape lead LinkedIn profile
     linkedin_data = scrape_linkedin(lead_linkedin_url)
-    if "data" not in linkedin_data:
-        return "LinkedIn profile not found"
+    if not linkedin_data or "data" not in linkedin_data:
+        return ("LinkedIn profile not found", "", "", "")
     
     # Summarize collected information about lead
     profile_data = linkedin_data["data"]
@@ -133,7 +138,7 @@ def research_lead_on_linkedin(lead_name, lead_email):
     profile_summary = invoke_llm(
         system_prompt=SUMMARIZE_LINKEDIN_PROFILE, 
         user_message=inputs,
-        model="gemini-1.5-flash"
+        model="gemini-3.1-pro-preview"
     )
     
     return (

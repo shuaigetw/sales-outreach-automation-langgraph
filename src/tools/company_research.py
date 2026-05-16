@@ -27,7 +27,7 @@ This profile provides context for engaging with a prospect who works at the comp
 def research_lead_company(linkedin_url):
     # Scrape company LinkedIn profile
     company_page_content = scrape_linkedin(linkedin_url, True)
-    if "data" not in company_page_content:
+    if not company_page_content or "data" not in company_page_content:
         return "LinkedIn profile not found"
     
     # Structure collected information about company
@@ -54,6 +54,6 @@ def generate_company_profile(company_linkedin_info, scraped_website):
     profile_summary = invoke_llm(
         system_prompt=CREATE_COMPANY_PROFILE, 
         user_message=inputs,
-        model="gemini-1.5-flash"
+        model="gemini-3.1-pro-preview"
     )
     return profile_summary
